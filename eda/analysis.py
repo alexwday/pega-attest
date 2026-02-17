@@ -63,13 +63,21 @@ def profile_column(series: pd.Series, col_type: str, top_n: int) -> dict:
         profile["top_values"] = []
 
     # Type-specific stats
-    if col_type == "numeric" and len(non_null) > 0:
-        profile["min"] = float(non_null.min())
-        profile["max"] = float(non_null.max())
-        profile["mean"] = float(non_null.mean())
-        profile["median"] = float(non_null.median())
-        profile["std"] = float(non_null.std()) if len(non_null) > 1 else 0
-        profile["values"] = non_null.values
+    if col_type == "numeric":
+        if len(non_null) > 0:
+            profile["min"] = float(non_null.min())
+            profile["max"] = float(non_null.max())
+            profile["mean"] = float(non_null.mean())
+            profile["median"] = float(non_null.median())
+            profile["std"] = float(non_null.std()) if len(non_null) > 1 else 0
+            profile["values"] = non_null.values
+        else:
+            profile["min"] = 0
+            profile["max"] = 0
+            profile["mean"] = 0
+            profile["median"] = 0
+            profile["std"] = 0
+            profile["values"] = non_null.values
 
     if col_type == "date" and len(non_null) > 0:
         try:
