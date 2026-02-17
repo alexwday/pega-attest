@@ -4,27 +4,6 @@ Profiles DataFrames and classifies columns.
 """
 import pandas as pd
 import numpy as np
-from pathlib import Path
-
-
-def load_descriptions(filepath: Path) -> dict:
-    """Load column descriptions from text file. Returns {column_name: description}."""
-    descriptions = {}
-    if not filepath.exists():
-        return descriptions
-
-    with open(filepath, "r") as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "|" in line:
-                parts = line.split("|", 1)
-                col_name = parts[0].strip()
-                desc = parts[1].strip()
-                if col_name and desc:
-                    descriptions[col_name] = desc
-    return descriptions
 
 
 def classify_column(series: pd.Series, categorical_threshold: int) -> str:
@@ -113,12 +92,3 @@ def profile_dataframe(df: pd.DataFrame, categorical_threshold: int, top_n: int) 
         profile = profile_column(df[col], col_type, top_n)
         profiles.append(profile)
     return profiles
-
-
-def get_sample_rows(df: pd.DataFrame, n_rows: int) -> pd.DataFrame:
-    """Get first N rows, truncating long string values for display."""
-    sample = df.head(n_rows).copy()
-    for col in sample.columns:
-        if sample[col].dtype == object:
-            sample[col] = sample[col].astype(str).str[:50]
-    return sample

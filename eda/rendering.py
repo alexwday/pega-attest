@@ -18,7 +18,6 @@ HEADER_TEXT = "#ffffff"
 ROW_EVEN = "#f8f9fa"
 ROW_ODD = "#ffffff"
 ACCENT = "#3498db"
-ACCENT_DARK = "#2980b9"
 MUTED = "#95a5a6"
 TEXT_DARK = "#2c3e50"
 BAR_COLOR = "#3498db"
@@ -78,12 +77,12 @@ class ReportRenderer:
     # ----------------------------------------------------------------
 
     def render_overview(self, table_name: str, filepath: str, df: pd.DataFrame,
-                        n_profiles: list):
+                        profiles: list):
         """Page 1: high-level overview of the table."""
         fig = self._new_page(f"OVERVIEW: {table_name}", filepath)
 
         type_counts = {}
-        for p in n_profiles:
+        for p in profiles:
             t = p["col_type"]
             type_counts[t] = type_counts.get(t, 0) + 1
 
@@ -125,7 +124,7 @@ class ReportRenderer:
         return self._save(fig, "overview")
 
     def render_schema_page(self, table_name: str, profiles: list,
-                           descriptions: dict, page_num: int, total_pages: int):
+                           page_num: int, total_pages: int):
         """Schema detail page — shows column metadata in a table."""
         fig = self._new_page(
             f"SCHEMA: {table_name}",
@@ -134,49 +133,41 @@ class ReportRenderer:
         ax = fig.add_axes([0.03, 0.04, 0.94, 0.86])
         ax.axis("off")
 
-        # Table header
         headers = ["#", "Column Name", "Type", "Dtype", "Non-Null", "Null%",
-                    "Unique", "Top Value (count)", "Description"]
-        col_widths = [0.03, 0.16, 0.07, 0.07, 0.06, 0.05, 0.05, 0.25, 0.26]
+                    "Unique", "Top Value (count)"]
+        col_widths = [0.04, 0.20, 0.09, 0.09, 0.08, 0.07, 0.07, 0.36]
 
-        n_rows = len(profiles) + 1  # +1 for header
+        n_rows = len(profiles) + 1
         row_height = min(0.07, 0.92 / n_rows)
 
         for col_i, (header, width) in enumerate(zip(headers, col_widths)):
             x = sum(col_widths[:col_i])
-            # Header cell
             ax.add_patch(plt.Rectangle((x, 1 - row_height), width, row_height,
                                        facecolor=HEADER_BG, edgecolor="white", lw=0.5))
             ax.text(x + width / 2, 1 - row_height / 2, header,
-                    ha="center", va="center", fontsize=10,
+                    ha="center", va="center", fontsize=11,
                     fontweight="bold", color=HEADER_TEXT)
 
-        # Data rows
         for row_i, p in enumerate(profiles):
             y = 1 - (row_i + 2) * row_height
             bg = ROW_EVEN if row_i % 2 == 0 else ROW_ODD
 
-            desc = descriptions.get(p["name"], "")
-            if len(desc) > 45:
-                desc = desc[:42] + "..."
-
             top_val = ""
             if p["top_values"]:
                 val, cnt = p["top_values"][0]
-                if len(val) > 30:
-                    val = val[:27] + "..."
+                if len(val) > 40:
+                    val = val[:37] + "..."
                 top_val = f"{val} ({cnt:,})"
 
             cells = [
                 str(row_i + 1),
-                p["name"][:25],
+                p["name"][:30],
                 p["col_type"],
                 p["dtype"][:10],
                 f"{p['non_null']:,}",
                 f"{p['null_pct']}%",
                 f"{p['n_unique']:,}",
                 top_val,
-                desc,
             ]
 
             for col_i, (cell, width) in enumerate(zip(cells, col_widths)):
@@ -186,7 +177,7 @@ class ReportRenderer:
                 ha = "center" if col_i < 7 else "left"
                 x_text = x + width / 2 if col_i < 7 else x + 0.005
                 ax.text(x_text, y + row_height / 2, cell,
-                        ha=ha, va="center", fontsize=9,
+                        ha=ha, va="center", fontsize=10,
                         fontfamily="monospace", color=TEXT_DARK)
 
         ax.set_xlim(0, 1)
@@ -201,7 +192,6 @@ class ReportRenderer:
         names = [p["name"] for p in profiles]
         nulls = [p["null_pct"] for p in profiles]
 
-        # Sort by null pct descending
         sorted_pairs = sorted(zip(names, nulls), key=lambda x: x[1], reverse=True)
         names = [p[0] for p in sorted_pairs]
         nulls = [p[1] for p in sorted_pairs]
@@ -217,15 +207,13 @@ class ReportRenderer:
         ax.invert_yaxis()
         ax.grid(axis="x", alpha=0.3)
 
-        # Value labels
         for i, v in enumerate(nulls):
             if v > 0:
                 ax.text(v + 0.5, i, f"{v}%", va="center", fontsize=8, color=TEXT_DARK)
 
         return self._save(fig, "nulls")
 
-    def render_categorical_distribution(self, table_name: str, profile: dict,
-                                        description: str = ""):
+    def render_categorical_distribution(self, table_name: str, profile: dict):
         """Bar chart for a single categorical column."""
         fig = self._new_page(
             f"DISTRIBUTION: {profile['name']}",
@@ -233,17 +221,13 @@ class ReportRenderer:
             f"Unique: {profile['n_unique']} | Null: {profile['null_pct']}%"
         )
 
-        if description:
-            fig.text(0.05, 0.91, f"Description: {description}",
-                     fontsize=12, color=TEXT_DARK, style="italic")
-
-        ax = fig.add_axes([0.25, 0.06, 0.70, 0.80])
+        ax = fig.add_axes([0.25, 0.06, 0.70, 0.82])
 
         values = profile["top_values"]
         if not values:
             ax.text(0.5, 0.5, "No non-null values", ha="center", va="center",
                     fontsize=16, color=MUTED)
-            return self._save(fig, f"cat_{profile['name'][:30]}")
+            return self._save(fig, f"cat_{_safe_name(profile['name'])}")
 
         labels = [v[0] for v in values]
         counts = [v[1] for v in values]
@@ -352,6 +336,7 @@ class ReportRenderer:
         with values for row 1, row 2, etc. as columns.
         Split across multiple pages if needed.
         """
+        n_rows = min(n_rows, len(df))
         sample = df.head(n_rows)
         cols = list(df.columns)
         cols_per_page = 20
@@ -370,9 +355,7 @@ class ReportRenderer:
             ax = fig.add_axes([0.02, 0.04, 0.96, 0.86])
             ax.axis("off")
 
-            # Headers
             headers = ["Column"] + [f"Row {i + 1}" for i in range(n_rows)]
-            n_data_cols = n_rows + 1
             col_widths = [0.20] + [0.80 / n_rows] * n_rows
             n_table_rows = len(page_cols) + 1
             row_height = min(0.055, 0.95 / n_table_rows)
@@ -408,48 +391,6 @@ class ReportRenderer:
             paths.append(self._save(fig, f"samples_{page_i + 1}"))
 
         return paths
-
-    def render_descriptions_page(self, table_name: str, descriptions: dict,
-                                 columns: list):
-        """Page showing column descriptions alongside column names."""
-        # Only show descriptions for columns that exist in this table
-        relevant = [(col, descriptions.get(col, "")) for col in columns]
-        if not any(desc for _, desc in relevant):
-            return None
-
-        pages = []
-        per_page = 25
-        total_pages = (len(relevant) + per_page - 1) // per_page
-
-        for page_i in range(total_pages):
-            start = page_i * per_page
-            end = min(start + per_page, len(relevant))
-            chunk = relevant[start:end]
-
-            fig = self._new_page(
-                f"COLUMN DESCRIPTIONS: {table_name}",
-                f"Page {page_i + 1}/{total_pages}"
-            )
-
-            lines = []
-            for i, (col, desc) in enumerate(chunk):
-                num = start + i + 1
-                marker = " " if desc else "*"
-                desc_text = desc if desc else "(no description)"
-                lines.append(f" {num:>3}. {col:<35} {marker} {desc_text}")
-
-            fig.text(0.04, 0.88, "\n".join(lines),
-                     fontsize=11, fontfamily="monospace", color=TEXT_DARK,
-                     verticalalignment="top", linespacing=1.4)
-
-            if page_i == 0:
-                fig.text(0.04, 0.04,
-                         "* = no description provided in column_descriptions.txt",
-                         fontsize=10, color=MUTED, style="italic")
-
-            pages.append(self._save(fig, f"descriptions_{page_i + 1}"))
-
-        return pages
 
 
 def _safe_name(name: str) -> str:
