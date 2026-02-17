@@ -1,51 +1,93 @@
 """
-Generates a Markdown EDA report designed for copy/paste into an LLM chat interface.
-Includes an analysis prompt that instructs the LLM to produce a written prose summary.
+Generates per-table Markdown EDA reports designed for copy/paste into an LLM chat.
+
+Each table produces two files:
+  1. Profile MD  — prompt + schema/distributions/stats, ends by telling the LLM
+                   to expect example rows in the next message.
+  2. Samples MD  — just the example rows, designed to paste as a follow-up message.
 """
 from datetime import datetime
 
 
-def generate_md_report(data_profiles: dict | None, user_profiles: dict | None) -> str:
-    """Generate complete markdown report with LLM prompt + data."""
+def generate_table_profile_md(t: dict) -> str:
+    """Generate the profile markdown for one table (no sample rows).
+
+    Includes the full LLM prompt and all schema/distribution/numeric/date data.
+    Ends by telling the LLM that example rows will follow in the next message.
+    """
     sections = []
-    sections.append(_build_prompt())
+    sections.append(_build_prompt(t["name"]))
     sections.append("---\n")
-
-    for table in [data_profiles, user_profiles]:
-        if table is None:
-            continue
-        sections.append(_render_table_md(table))
-
+    sections.append(_render_profile_data(t))
+    sections.append(_build_closing(t["name"]))
     return "\n".join(sections)
 
 
-def _build_prompt() -> str:
-    return f"""# EDA Data Profile — Analyze and Summarize
+def generate_table_samples_md(t: dict) -> str:
+    """Generate just the sample rows markdown for one table.
 
-**Instructions for the LLM:** You are a senior data analyst. Below is a complete exploratory data analysis (EDA) profile of one or two database tables from a financial attestation system used by a bank's CFO group. The data covers monthly transit attestations across ~2,000 users.
+    Designed to be pasted as a follow-up message after the profile.
+    """
+    parts = []
+    name = t["name"]
 
-**Your task:** Read all of the data profile information below and produce a **written narrative summary** of the dataset. Follow these rules strictly:
+    parts.append(f"Here are the example data rows for the **{name}** as promised.\n")
+
+    if t.get("sample_rows") is not None:
+        df_sample = t["sample_rows"]
+        n_rows = t["sample_count"]
+        parts.append(f"### {name} — Sample Rows (first {n_rows})\n")
+        for r in range(n_rows):
+            parts.append(f"**Row {r+1}:**")
+            for col in df_sample.columns:
+                val = str(df_sample[col].iloc[r])[:80]
+                parts.append(f"  {col}: {val}")
+            parts.append("")
+    else:
+        parts.append("No sample rows available for this table.\n")
+
+    parts.append("---\n")
+    parts.append("Please now proceed with the full written narrative summary as described "
+                 "in my previous message, incorporating these example rows into your "
+                 "sample data observations section.")
+    return "\n".join(parts)
+
+
+def _build_prompt(table_name: str) -> str:
+    return f"""# EDA Data Profile — {table_name}
+
+**Instructions:** You are a senior data analyst. Below is a complete exploratory data analysis (EDA) profile of the **{table_name}** from a financial attestation system used by a bank's CFO group. The data covers monthly transit attestations across approximately 2,000 users.
+
+**Your task:** Read all of the data profile information below and then produce a **written narrative summary** of this dataset. Follow these rules strictly:
 
 1. **Output format: prose paragraphs only.** Do NOT produce tables, bullet lists, code blocks, or formatted metrics. Write in complete sentences organized into paragraphs. This summary will be photographed and OCR'd, so plain flowing text is critical.
 2. **Structure your summary in this order:**
-   - **Dataset overview** — How many tables, rows, columns. What the data appears to represent at a high level.
+   - **Dataset overview** — Row count, column count. What the data appears to represent at a high level.
    - **Data quality assessment** — Overall null rates, duplicate rows, any columns with severe missing data (>30% null). Call out specific column names and their null percentages.
    - **Column type breakdown** — How many columns are categorical, numeric, date, text, boolean. What this tells us about the data structure.
    - **Key categorical columns** — For each categorical/boolean column, describe the distribution in words. Name the top values and their approximate shares. Flag any columns with suspicious distributions (e.g., one value dominates 90%+, or many near-equal values).
    - **Numeric columns** — For each numeric column, describe the range, central tendency, and spread in words. Flag any with extreme ranges, high standard deviations, or unusual min/max values.
    - **Date columns** — Describe the date ranges observed. Note any gaps or unexpected date boundaries.
-   - **Sample data observations** — Based on the sample rows, note any patterns, formatting issues, or data quality concerns visible in the raw values.
+   - **Sample data observations** — Based on the example rows (which I will provide in my next message), note any patterns, formatting issues, or data quality concerns visible in the raw values.
    - **Potential data issues and recommendations** — Summarize any red flags: high nulls, potential duplicates, columns that may need cleaning, suspicious distributions, or columns that might be misclassified.
 3. **Be specific.** Always name the exact columns, values, and numbers you are referring to. Vague statements like "some columns have nulls" are not useful.
-4. **Be concise but thorough.** Aim for roughly 400-800 words per table. Do not pad with filler.
+4. **Be concise but thorough.** Aim for roughly 400-800 words. Do not pad with filler.
 5. **Use plain language.** Avoid jargon where possible. Write as if briefing a non-technical executive who needs to understand the data landscape.
+
+**Important:** I will provide the example data rows in my **next message** because of input length limits. After reviewing all of the profile data below, please respond with: "Understood. I have reviewed the {table_name} profile data. Please provide the example data rows and I will produce the full written narrative summary."
 
 **Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
 
 
-def _render_table_md(t: dict) -> str:
-    """Render all profile data for one table as markdown."""
+def _build_closing(table_name: str) -> str:
+    return f"""---
+
+**End of {table_name} profile data.** Remember: do NOT produce the summary yet. Please respond confirming you have reviewed this data and ask me to provide the example rows in my next message."""
+
+
+def _render_profile_data(t: dict) -> str:
+    """Render schema, distributions, numeric, and date data (no sample rows)."""
     parts = []
     name = t["name"]
 
@@ -57,7 +99,7 @@ def _render_table_md(t: dict) -> str:
         type_counts[ct] = type_counts.get(ct, 0) + 1
     type_summary = ", ".join(f"{ct}: {n}" for ct, n in sorted(type_counts.items()))
 
-    parts.append(f"## {name}\n")
+    parts.append(f"## {name} — Overview\n")
     parts.append(f"Rows: {t['rows']:,} | Columns: {t['cols']} | "
                  f"Memory: {t['memory_mb']:.1f} MB | "
                  f"Duplicate rows: {t['duplicated_rows']:,} | "
@@ -126,17 +168,4 @@ def _render_table_md(t: dict) -> str:
             )
         parts.append("")
 
-    # --- Sample rows ---
-    if t.get("sample_rows") is not None:
-        df_sample = t["sample_rows"]
-        n_rows = t["sample_count"]
-        parts.append(f"### {name} — Sample Rows (first {n_rows})\n")
-        for r in range(n_rows):
-            parts.append(f"**Row {r+1}:**")
-            for col in df_sample.columns:
-                val = str(df_sample[col].iloc[r])[:60]
-                parts.append(f"  {col}: {val}")
-            parts.append("")
-
-    parts.append("---\n")
     return "\n".join(parts)
