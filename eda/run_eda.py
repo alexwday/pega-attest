@@ -3,8 +3,8 @@
 Pega Attestations - Exploratory Data Analysis
 ==============================================
 
-Generates a single HTML report for data exploration.
-Open in browser, scroll through, screenshot what you need.
+Generates a single HTML slideshow report.
+Open in browser, arrow keys to flip between pages, one photo per page.
 
 Usage:
   1. Paste your data into eda/input/pega_input.xlsx
@@ -12,6 +12,7 @@ Usage:
      - Sheet "users" = user directory extract
   2. Run:  python eda/run_eda.py
   3. Open: eda/output/eda_report.html in your browser
+  4. Use arrow keys to navigate, photograph each slide
 """
 import sys
 from pathlib import Path
@@ -26,7 +27,7 @@ from eda.config import (
     TOP_N_VALUES, SAMPLE_ROWS,
 )
 from eda.analysis import profile_dataframe
-from eda.html_report import generate_report, build_sample_html
+from eda.html_report import generate_report, build_sample_data
 
 
 def load_sheet(filepath: Path, sheet_name: str) -> pd.DataFrame:
@@ -43,7 +44,7 @@ def load_sheet(filepath: Path, sheet_name: str) -> pd.DataFrame:
 def build_table_profiles(df: pd.DataFrame, table_name: str) -> dict:
     print(f"\n  Profiling: {table_name}...")
     profiles = profile_dataframe(df, CATEGORICAL_THRESHOLD, TOP_N_VALUES)
-    sample_html = build_sample_html(df, SAMPLE_ROWS)
+    sample_df, sample_count = build_sample_data(df, SAMPLE_ROWS)
 
     return {
         "name": table_name,
@@ -54,8 +55,8 @@ def build_table_profiles(df: pd.DataFrame, table_name: str) -> dict:
         "total_nulls": int(df.isna().sum().sum()),
         "total_cells": df.shape[0] * df.shape[1],
         "profiles": profiles,
-        "sample_html": sample_html,
-        "sample_count": min(SAMPLE_ROWS, len(df)),
+        "sample_rows": sample_df,
+        "sample_count": sample_count,
     }
 
 
@@ -75,26 +76,24 @@ def main():
     data_profiles = None
     user_profiles = None
 
-    # Data table
     df_data = load_sheet(INPUT_FILE, DATA_SHEET)
     if df_data is not None and len(df_data) > 0:
         data_profiles = build_table_profiles(df_data, "Data Table")
 
-    # User table
     df_user = load_sheet(INPUT_FILE, USER_SHEET)
     if df_user is not None and len(df_user) > 0:
         user_profiles = build_table_profiles(df_user, "User Directory")
 
-    # Generate HTML report
-    print("\n  Generating HTML report...")
-    html = generate_report(data_profiles, user_profiles)
+    print("\n  Generating HTML slideshow...")
+    report_html = generate_report(data_profiles, user_profiles)
 
     output_path = OUTPUT_DIR / "eda_report.html"
-    output_path.write_text(html, encoding="utf-8")
+    output_path.write_text(report_html, encoding="utf-8")
 
     print(f"\n{'=' * 60}")
     print(f"  COMPLETE")
     print(f"  Open in browser: {output_path.resolve()}")
+    print(f"  Use arrow keys to navigate between slides")
     print(f"{'=' * 60}")
 
 
