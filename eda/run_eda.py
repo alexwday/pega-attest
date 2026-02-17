@@ -28,6 +28,7 @@ from eda.config import (
 )
 from eda.analysis import profile_dataframe
 from eda.html_report import generate_report, build_sample_data
+from eda.md_report import generate_md_report
 
 
 def load_sheet(filepath: Path, sheet_name: str) -> pd.DataFrame:
@@ -90,10 +91,19 @@ def main():
     output_path = OUTPUT_DIR / "eda_report.html"
     output_path.write_text(report_html, encoding="utf-8")
 
+    print("  Generating Markdown report for LLM analysis...")
+    report_md = generate_md_report(data_profiles, user_profiles)
+
+    md_path = OUTPUT_DIR / "eda_report.md"
+    md_path.write_text(report_md, encoding="utf-8")
+
     print(f"\n{'=' * 60}")
     print(f"  COMPLETE")
-    print(f"  Open in browser: {output_path.resolve()}")
-    print(f"  Use arrow keys to navigate between slides")
+    print(f"  HTML slideshow: {output_path.resolve()}")
+    print(f"  Markdown (for LLM): {md_path.resolve()}")
+    print(f"  ")
+    print(f"  Copy the .md file contents into an LLM chat to get")
+    print(f"  a written prose summary you can photograph and share.")
     print(f"{'=' * 60}")
 
 
