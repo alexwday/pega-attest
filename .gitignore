@@ -15,6 +15,7 @@ env/
 # EDA input/output (data files stay local)
 eda/input/*
 !eda/input/.gitkeep
+!eda/input/pega_input.xlsx
 eda/output/*
 !eda/output/.gitkeep
 
