@@ -9,10 +9,10 @@ pip install -r requirements.txt
 ```
 
 ## Prepare input
-1. Create an Excel file called `pega_input.xlsx` in `eda/input/`
-2. It needs two sheets:
-   - Sheet named **"data"** — paste your attestation data extract here
-   - Sheet named **"users"** — paste your user directory extract here
+1. Open `eda/input/pega_input.xlsx` (template already there)
+2. Paste your attestation data into the **"data"** sheet
+3. Paste your user directory into the **"users"** sheet
+4. Save
 
 ## Run
 ```bash
@@ -21,4 +21,6 @@ python eda/run_eda.py
 ```
 
 ## Output
-Numbered PNGs appear in `eda/output/` — photograph and share back.
+Opens `eda/output/eda_report.html` in your browser.
+Single page — scroll through or press **J/K** to jump between sections.
+Screenshot what you need.

@@ -3,15 +3,15 @@
 Pega Attestations - Exploratory Data Analysis
 ==============================================
 
-Generates numbered PNG report pages for each input table.
-Output is designed to be photographed from screen and shared.
+Generates a single HTML report for data exploration.
+Open in browser, scroll through, screenshot what you need.
 
 Usage:
-  1. Create eda/input/pega_input.xlsx with two sheets:
-     - "data"  — paste your attestation data extract
-     - "users" — paste your user directory extract
+  1. Paste your data into eda/input/pega_input.xlsx
+     - Sheet "data"  = attestation data extract
+     - Sheet "users" = user directory extract
   2. Run:  python eda/run_eda.py
-  3. Find output PNGs in eda/output/
+  3. Open: eda/output/eda_report.html in your browser
 """
 import sys
 from pathlib import Path
@@ -22,17 +22,11 @@ import pandas as pd
 
 from eda.config import (
     INPUT_FILE, DATA_SHEET, USER_SHEET,
-    OUTPUT_DIR, DPI, CATEGORICAL_THRESHOLD,
-    TOP_N_VALUES, SAMPLE_ROWS, COLS_PER_SCHEMA_PAGE,
+    OUTPUT_DIR, CATEGORICAL_THRESHOLD,
+    TOP_N_VALUES, SAMPLE_ROWS,
 )
 from eda.analysis import profile_dataframe
-from eda.rendering import ReportRenderer
-
-
-def clear_output_dir(output_dir: Path):
-    for f in output_dir.glob("*.png"):
-        f.unlink()
-    print(f"  Cleared {output_dir}")
+from eda.html_report import generate_report, build_sample_html
 
 
 def load_sheet(filepath: Path, sheet_name: str) -> pd.DataFrame:
@@ -46,58 +40,23 @@ def load_sheet(filepath: Path, sheet_name: str) -> pd.DataFrame:
         return None
 
 
-def run_eda_for_table(df: pd.DataFrame, table_name: str, prefix: str):
-    print(f"\n{'=' * 60}")
-    print(f"  Analyzing: {table_name}")
-    print(f"{'=' * 60}")
-
-    renderer = ReportRenderer(OUTPUT_DIR, prefix=prefix, dpi=DPI)
-
-    # Profile all columns
-    print("\n  Profiling columns...")
+def build_table_profiles(df: pd.DataFrame, table_name: str) -> dict:
+    print(f"\n  Profiling: {table_name}...")
     profiles = profile_dataframe(df, CATEGORICAL_THRESHOLD, TOP_N_VALUES)
+    sample_html = build_sample_html(df, SAMPLE_ROWS)
 
-    # Overview
-    print("\n  Rendering overview...")
-    renderer.render_overview(table_name, prefix, df, profiles)
-
-    # Schema pages
-    print("\n  Rendering schema...")
-    total_schema_pages = (len(profiles) + COLS_PER_SCHEMA_PAGE - 1) // COLS_PER_SCHEMA_PAGE
-    for i in range(total_schema_pages):
-        start = i * COLS_PER_SCHEMA_PAGE
-        end = min(start + COLS_PER_SCHEMA_PAGE, len(profiles))
-        renderer.render_schema_page(
-            table_name, profiles[start:end],
-            page_num=i + 1, total_pages=total_schema_pages,
-        )
-
-    # Null analysis
-    print("\n  Rendering null analysis...")
-    renderer.render_null_analysis(table_name, profiles)
-
-    # Categorical distributions
-    categoricals = [p for p in profiles
-                    if p["col_type"] in ("categorical", "boolean")]
-    if categoricals:
-        print(f"\n  Rendering {len(categoricals)} categorical distributions...")
-        for p in categoricals:
-            renderer.render_categorical_distribution(table_name, p)
-
-    # Numeric summary
-    print("\n  Rendering numeric summary...")
-    renderer.render_numeric_summary(table_name, profiles)
-
-    # Date summary
-    print("\n  Rendering date summary...")
-    renderer.render_date_summary(table_name, profiles)
-
-    # Sample rows
-    print("\n  Rendering sample rows...")
-    renderer.render_sample_rows(table_name, df, SAMPLE_ROWS)
-
-    print(f"\n  Done: {renderer.page_counter} pages generated for {table_name}")
-    return renderer.page_counter
+    return {
+        "name": table_name,
+        "rows": len(df),
+        "cols": len(df.columns),
+        "memory_mb": df.memory_usage(deep=True).sum() / 1024 / 1024,
+        "duplicated_rows": int(df.duplicated().sum()),
+        "total_nulls": int(df.isna().sum().sum()),
+        "total_cells": df.shape[0] * df.shape[1],
+        "profiles": profiles,
+        "sample_html": sample_html,
+        "sample_count": min(SAMPLE_ROWS, len(df)),
+    }
 
 
 def main():
@@ -105,34 +64,38 @@ def main():
     print("  PEGA ATTESTATIONS - EDA REPORT GENERATOR")
     print("=" * 60)
 
-    # Check input file exists
     if not INPUT_FILE.exists():
         print(f"\n  ERROR: Input file not found: {INPUT_FILE}")
-        print(f"\n  Create {INPUT_FILE.name} in {INPUT_FILE.parent}/")
-        print(f"  with two sheets: '{DATA_SHEET}' and '{USER_SHEET}'")
+        print(f"\n  Paste your data into: {INPUT_FILE}")
+        print(f"  Sheets needed: '{DATA_SHEET}' and '{USER_SHEET}'")
         sys.exit(1)
 
-    # Clear previous output
-    print("\nClearing previous output...")
-    clear_output_dir(OUTPUT_DIR)
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
-    total_pages = 0
+    data_profiles = None
+    user_profiles = None
 
     # Data table
     df_data = load_sheet(INPUT_FILE, DATA_SHEET)
-    if df_data is not None:
-        total_pages += run_eda_for_table(df_data, "Data Table", "data")
+    if df_data is not None and len(df_data) > 0:
+        data_profiles = build_table_profiles(df_data, "Data Table")
 
     # User table
     df_user = load_sheet(INPUT_FILE, USER_SHEET)
-    if df_user is not None:
-        total_pages += run_eda_for_table(df_user, "User Directory", "user")
+    if df_user is not None and len(df_user) > 0:
+        user_profiles = build_table_profiles(df_user, "User Directory")
+
+    # Generate HTML report
+    print("\n  Generating HTML report...")
+    html = generate_report(data_profiles, user_profiles)
+
+    output_path = OUTPUT_DIR / "eda_report.html"
+    output_path.write_text(html, encoding="utf-8")
 
     print(f"\n{'=' * 60}")
-    print(f"  COMPLETE: {total_pages} total pages generated")
-    print(f"  Output:   {OUTPUT_DIR.resolve()}")
+    print(f"  COMPLETE")
+    print(f"  Open in browser: {output_path.resolve()}")
     print(f"{'=' * 60}")
-    print(f"\n  Browse the output/ folder and photograph the pages to share.")
 
 
 if __name__ == "__main__":
